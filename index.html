@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>NYC Planner</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="map/map.css">
+</head>
+<body>
+  <video id="bg-cam" playsinline muted autoplay></video>
+  <header class="bar">
+    <div class="brand">NYC Planner <span>· your saved places, by area</span></div>
+    <div class="bar-right">
+      <span id="hand-state" class="hand-state"></span>
+      <button id="hand-btn" type="button" title="Hand gestures: ✋ open hand = zoom in, ✌️ peace = zoom out, ✊ fist = drag the map, ☝️ one finger = point">✋ Hands</button>
+      <select id="cam-select" aria-label="Camera" hidden></select>
+      <button id="export-btn" type="button" title="Download today's plan as a calendar file (.ics) — opens in Calendar / Google Calendar">⬆️ Export plan</button>
+      <button id="clear-btn" type="button" class="ghost" title="Remove imported places from this browser">Clear</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- Left: camera + the five cards -->
+    <aside class="panel left">
+      <div class="kicker">CARDS</div>
+      <div class="cam-box">
+        <video id="cam" playsinline muted></video>
+        <canvas id="cam-overlay"></canvas>
+      </div>
+      <div class="cam-meta">
+        <span id="cam-status">Camera off</span>
+        <label class="mirror"><input id="cam-mirror" type="checkbox"> Mirror</label>
+      </div>
+      <p class="hint">Keep cards in the <b>dock</b> (left of the dashed line). Slide one onto the <b>table</b> to fly there — it stays there until you press <b>✕ Clear area</b>.</p>
+      <ul id="card-list" class="card-list"></ul>
+    </aside>
+
+    <!-- Middle: map + places in this area -->
+    <section class="middle">
+      <div class="map-wrap">
+        <div id="map"></div>
+        <canvas id="lasso"></canvas>
+        <button id="area-clear" type="button" hidden>✕ Clear area</button>
+        <button id="lasso-btn" type="button" title="Circle places to add them (Esc to cancel)">◯ Circle places</button>
+      </div>
+      <div class="panel list">
+        <div class="list-head"><span id="list-title" class="list-title">All saved places</span><span id="list-count" class="muted"></span></div>
+        <div id="cat-tabs" class="cat-tabs"></div>
+        <ul id="place-list" class="place-list"></ul>
+      </div>
+    </section>
+
+    <!-- Right: today's plan -->
+    <aside class="panel right">
+      <div class="kicker">TODAY'S PLAN <button id="plan-clear" type="button" class="ghost small">Clear</button></div>
+      <div class="plan-controls">
+        <button id="plan-arrange" type="button">✨ Arrange my day</button>
+      </div>
+      <div id="plan-order" class="muted order"></div>
+      <ol id="plan-list" class="plan-list"></ol>
+      <div id="plan-total" class="muted total"></div>
+      <p class="hint">PATH times come from the PATH timetable; walks and subway hops between places are estimates (est.). Use ▲ ▼ (or drag) to change the order yourself. The day starts now; late at night it starts with the first train.</p>
+    </aside>
+  </main>
+
+  <div id="toast" hidden></div>
+
+  <div id="start-screen">
+    <div class="start-card">
+      <h1>NYC Planner</h1>
+      <p>Hold one of your five cards under the camera to jump to that part of the city. Your Google Maps saved places show up on the map and in the list below it.</p>
+      <button id="start" type="button">Start camera</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="config.js"></script>
+  <script src="map/routes.js"></script>
+  <script src="subway.js"></script>
+  <script src="map/map-geo.js"></script>
+  <script src="map/map-qr.js"></script>
+  <script src="map/map-app.js"></script>
+  <script src="map/map-day.js"></script>
+  <script src="my-places.js"></script>
+  <script src="more-places.js"></script>
+  <script src="map/map-import.js"></script>
+  <script src="map/map-hands.js"></script>
+  <script src="map/map-phone.js"></script>
+</body>
+</html>

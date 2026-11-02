@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>NYC Planner · Phone camera</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #000; color: #fff; font: 16px/1.4 system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; }
+    video { flex: 1; width: 100%; min-height: 0; object-fit: contain; background: #111; }
+    .bar { padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); display: grid; gap: 10px; background: #111; }
+    .status { font-weight: 700; }
+    .status.ok { color: #7CFC9A; }
+    .status.bad { color: #FF8A80; }
+    .row { display: flex; gap: 8px; }
+    input { flex: 1; min-width: 0; font-size: 20px; padding: 10px 12px; border-radius: 10px; border: 1px solid #555; background: #000; color: #fff; letter-spacing: 0.2em; text-align: center; }
+    button { font-size: 16px; font-weight: 700; padding: 12px 16px; border-radius: 10px; border: 0; background: #fff; color: #111; }
+    button.ghost { background: #222; color: #fff; border: 1px solid #555; }
+    .hint { font-size: 13px; color: #aaa; margin: 0; }
+  </style>
+</head>
+<body>
+  <video id="v" playsinline muted autoplay></video>
+  <div class="bar">
+    <div id="status" class="status">Type the code shown on the computer.</div>
+    <div class="row">
+      <input id="code" inputmode="numeric" maxlength="4" placeholder="0000" aria-label="Code from the computer">
+      <button id="go" type="button">Connect</button>
+    </div>
+    <div class="row">
+      <button id="flip" type="button" class="ghost">↺ Flip camera</button>
+      <button id="stop" type="button" class="ghost">Stop</button>
+    </div>
+    <p class="hint">Keep this page open and the phone unlocked. Point it at the table where you put the cards and move your hands.</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+    // Sends this phone's camera to the NYC Planner on the computer (WebRTC,
+    // through the free PeerJS connection service). Nothing is recorded.
+    const video = document.getElementById('v');
+    const statusEl = document.getElementById('status');
+    const codeEl = document.getElementById('code');
+    let stream = null;
+    let facing = 'environment';
+    let peer = null;
+    let call = null;
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    async function openCamera() {
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      video.srcObject = stream;
+    }
+
+    async function connect() {
+      const code = codeEl.value.replace(/\D/g, '');
+      if (code.length !== 4) { setStatus('The code has 4 digits.', 'bad'); return; }
+      try { localStorage.setItem('phoneCode', code); } catch (e) { /* ok */ }
+      setStatus('Starting camera…');
+      try { await openCamera(); } catch (e) { setStatus('Camera not allowed — allow it in the browser and try again.', 'bad'); return; }
+      setStatus('Connecting…');
+      try { peer?.destroy(); } catch (e) { /* gone */ }
+      peer = new Peer();
+      peer.on('open', () => {
+        call = peer.call('nycplanner-' + code, stream);
+        if (!call) { setStatus('Could not reach the computer. Check the code.', 'bad'); return; }
+        // Keep the picture sharp (QR codes need detail) rather than smooth.
+        setTimeout(() => {
+          const sender = call.peerConnection?.getSenders().find((s) => s.track && s.track.kind === 'video');
+          if (!sender) return;
+          const p = sender.getParameters();
+          p.degradationPreference = 'maintain-resolution';
+          p.encodings = (p.encodings && p.encodings.length ? p.encodings : [{}]).map((e) => ({ ...e, maxBitrate: 4000000 }));
+          sender.setParameters(p).catch(() => {});
+        }, 500);
+        call.on('close', () => setStatus('Disconnected. Press Connect again.', 'bad'));
+        call.on('error', () => setStatus('Connection error. Press Connect again.', 'bad'));
+        call.peerConnection?.addEventListener('connectionstatechange', () => {
+          const s = call.peerConnection.connectionState;
+          if (s === 'connected') setStatus('✓ Connected — the computer sees this camera.', 'ok');
+          if (s === 'failed') setStatus('Could not connect (the network may block it). Try the same Wi-Fi.', 'bad');
+        });
+      });
+      peer.on('error', (e) => {
+        setStatus(e.type === 'peer-unavailable' ? 'No computer with that code. Check the code on the screen.' : 'Connection error: ' + e.type, 'bad');
+      });
+    }
+
+    document.getElementById('go').addEventListener('click', connect);
+    codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+    document.getElementById('flip').addEventListener('click', async () => {
+      facing = facing === 'environment' ? 'user' : 'environment';
+      try {
+        await openCamera();
+        const track = stream.getVideoTracks()[0];
+        const sender = call?.peerConnection?.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(track);
+      } catch (e) { setStatus('Could not switch camera.', 'bad'); }
+    });
+    document.getElementById('stop').addEventListener('click', () => {
+      try { call?.close(); peer?.destroy(); } catch (e) { /* gone */ }
+      stream?.getTracks().forEach((t) => t.stop());
+      video.srcObject = null;
+      setStatus('Stopped.');
+    });
+
+    // The code can come in the link (from the QR code on the computer).
+    const fromLink = new URLSearchParams(location.search).get('code');
+    let saved = '';
+    try { saved = localStorage.getItem('phoneCode') || ''; } catch (e) { /* ok */ }
+    codeEl.value = fromLink || saved;
+    if (fromLink) setStatus('Press Connect to send this camera to the computer.');
+  </script>
+</body>
+</html>
