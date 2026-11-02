@@ -40,13 +40,23 @@ let nativeList = null;
 
 async function startCam(deviceId) {
   camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
+  setCamStatus('Starting camera…');
+  // Show the camera menu (with "📱 Phone camera…") right away, so the phone
+  // can be picked even when this computer's camera doesn't start.
+  fillCamList().catch(() => {});
   const video = { width: { ideal: 1280 }, height: { ideal: 720 } };
   if (deviceId) video.deviceId = { exact: deviceId };
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    camStream = await cameraWithTimeout({ audio: false, video }, 8000);
   } catch (error) {
     if (deviceId) return startCam(null);
-    setCamStatus('No camera — you can still click the cards');
+    setCamStatus(error?.name === 'NotAllowedError'
+      ? 'Camera blocked — allow it in the browser, or pick 📱 Phone camera (top right)'
+      : error?.name === 'Timeout'
+        ? 'Camera did not start — quit other camera apps, or pick 📱 Phone camera (top right)'
+        : 'No camera — pick 📱 Phone camera (top right), or click the cards');
+    await fillCamList().catch(() => {});
     return;
   }
   camVideo.srcObject = camStream;
@@ -57,11 +67,32 @@ async function startCam(deviceId) {
   await fillCamList();
 }
 
+// getUserMedia can hang (e.g. a remembered iPhone camera that isn't nearby):
+// give up after `ms` and stop the camera if it turns up later.
+function cameraWithTimeout(constraints, ms) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      done = true;
+      reject(Object.assign(new Error('camera timeout'), { name: 'Timeout' }));
+    }, ms);
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+      clearTimeout(timer);
+      if (done) stream.getTracks().forEach((t) => t.stop());
+      else resolve(stream);
+    }, (error) => { clearTimeout(timer); if (!done) reject(error); });
+  });
+}
+
 async function fillCamList() {
-  const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+  let cams = [];
+  try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch (error) { /* none */ }
   const active = camStream?.getVideoTracks()[0]?.getSettings().deviceId;
   const phoneOn = typeof phoneActive === 'function' && phoneActive();
-  camSelect.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}"${!phoneOn && c.deviceId === active ? ' selected' : ''}>${escapeText(c.label || `Camera ${i + 1}`)}</option>`).join('')
+  // With no camera running, a placeholder is selected so that picking any
+  // real entry (even the only one) counts as a change.
+  const none = !phoneOn && !active ? '<option value="" disabled selected>Choose a camera…</option>' : '';
+  camSelect.innerHTML = none + cams.map((c, i) => `<option value="${c.deviceId}"${!phoneOn && c.deviceId === active ? ' selected' : ''}>${escapeText(c.label || `Camera ${i + 1}`)}</option>`).join('')
     + `<option value="__phone"${phoneOn ? ' selected' : ''}>📱 Phone camera…</option>`;
   camSelect.hidden = false;
 }
