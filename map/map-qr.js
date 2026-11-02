@@ -103,7 +103,10 @@ function setUpScan() {
   scanCanvas.height = Math.round(camVideo.videoHeight * scanScale);
   scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
   sweep = [];
-  for (const size of [Math.round(scanCanvas.height * 0.42), Math.round(scanCanvas.height * 0.8)]) {
+  // Window sizes come from the SHORT side, so a phone held upright (a tall
+  // picture) still gets windows that fit inside the frame.
+  const short = Math.min(scanCanvas.width, scanCanvas.height);
+  for (const size of [Math.round(short * 0.42), Math.round(short * 0.8)]) {
     const step = Math.round(size / 2);
     for (let y = 0; y <= scanCanvas.height - size; y += step) {
       for (let x = 0; x <= scanCanvas.width - size; x += step) sweep.push({ x, y, size });
