@@ -387,3 +387,24 @@ body.cam-mirror #bg-cam { transform: scaleX(-1); }
 .ph-status.bad { color: #FF8A80; }
 .ph-actions { display: flex; justify-content: center; margin-top: 12px; }
 .ph-actions button { min-height: 40px; padding: 0 22px; border-radius: 999px; border: 0; background: #fff; color: #111; font-weight: 700; cursor: pointer; }
+
+/* --- Button row low on the map (reachable with a pointing finger) -------- */
+.hand-bar {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 4;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px;
+  width: max-content; max-width: calc(100% - 24px);
+}
+.hand-bar button,
+.hand-bar #lasso-btn,
+.hand-bar #area-clear,
+.hand-bar #plan-arrange {
+  position: static; flex: none; min-height: 48px; padding: 0 18px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.6); background: rgba(0, 0, 0, 0.55); color: #fff;
+  font-weight: 600; white-space: nowrap; cursor: pointer;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.hand-bar #plan-arrange { background: #fff; color: #111; border-color: #fff; font-weight: 700; }
+.hand-bar #lasso-btn.on { background: #fff; color: #111; }
+.hand-bar .hand-state { min-width: 0; text-align: left; text-shadow: 0 1px 3px #000; }
+.hand-bar .hand-state:empty { display: none; }
+.hand-bar #clear-btn.confirm { background: #c62828; border-color: #ff8a80; }
