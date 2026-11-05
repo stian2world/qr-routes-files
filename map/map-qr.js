@@ -40,23 +40,13 @@ let nativeList = null;
 
 async function startCam(deviceId) {
   camStream?.getTracks().forEach((t) => t.stop());
-  camStream = null;
-  setCamStatus('Starting camera…');
-  // Show the camera menu (with "📱 Phone camera…") right away, so the phone
-  // can be picked even when this computer's camera doesn't start.
-  fillCamList().catch(() => {});
   const video = { width: { ideal: 1280 }, height: { ideal: 720 } };
   if (deviceId) video.deviceId = { exact: deviceId };
   try {
-    camStream = await cameraWithTimeout({ audio: false, video }, 8000);
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
   } catch (error) {
     if (deviceId) return startCam(null);
-    setCamStatus(error?.name === 'NotAllowedError'
-      ? 'Camera blocked — allow it in the browser, or pick 📱 Phone camera (top right)'
-      : error?.name === 'Timeout'
-        ? 'Camera did not start — quit other camera apps, or pick 📱 Phone camera (top right)'
-        : 'No camera — pick 📱 Phone camera (top right), or click the cards');
-    await fillCamList().catch(() => {});
+    setCamStatus('No camera — you can still click the cards');
     return;
   }
   camVideo.srcObject = camStream;
@@ -67,32 +57,11 @@ async function startCam(deviceId) {
   await fillCamList();
 }
 
-// getUserMedia can hang (e.g. a remembered iPhone camera that isn't nearby):
-// give up after `ms` and stop the camera if it turns up later.
-function cameraWithTimeout(constraints, ms) {
-  return new Promise((resolve, reject) => {
-    let done = false;
-    const timer = setTimeout(() => {
-      done = true;
-      reject(Object.assign(new Error('camera timeout'), { name: 'Timeout' }));
-    }, ms);
-    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-      clearTimeout(timer);
-      if (done) stream.getTracks().forEach((t) => t.stop());
-      else resolve(stream);
-    }, (error) => { clearTimeout(timer); if (!done) reject(error); });
-  });
-}
-
 async function fillCamList() {
-  let cams = [];
-  try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch (error) { /* none */ }
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
   const active = camStream?.getVideoTracks()[0]?.getSettings().deviceId;
   const phoneOn = typeof phoneActive === 'function' && phoneActive();
-  // With no camera running, a placeholder is selected so that picking any
-  // real entry (even the only one) counts as a change.
-  const none = !phoneOn && !active ? '<option value="" disabled selected>Choose a camera…</option>' : '';
-  camSelect.innerHTML = none + cams.map((c, i) => `<option value="${c.deviceId}"${!phoneOn && c.deviceId === active ? ' selected' : ''}>${escapeText(c.label || `Camera ${i + 1}`)}</option>`).join('')
+  camSelect.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}"${!phoneOn && c.deviceId === active ? ' selected' : ''}>${escapeText(c.label || `Camera ${i + 1}`)}</option>`).join('')
     + `<option value="__phone"${phoneOn ? ' selected' : ''}>📱 Phone camera…</option>`;
   camSelect.hidden = false;
 }
@@ -134,10 +103,7 @@ function setUpScan() {
   scanCanvas.height = Math.round(camVideo.videoHeight * scanScale);
   scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
   sweep = [];
-  // Window sizes come from the SHORT side, so a phone held upright (a tall
-  // picture) still gets windows that fit inside the frame.
-  const short = Math.min(scanCanvas.width, scanCanvas.height);
-  for (const size of [Math.round(short * 0.42), Math.round(short * 0.8)]) {
+  for (const size of [Math.round(scanCanvas.height * 0.42), Math.round(scanCanvas.height * 0.8)]) {
     const step = Math.round(size / 2);
     for (let y = 0; y <= scanCanvas.height - size; y += step) {
       for (let x = 0; x <= scanCanvas.width - size; x += step) sweep.push({ x, y, size });
@@ -186,7 +152,10 @@ function scanFrame(now) {
   }
   // Then sweep for new cards, a few milliseconds per frame.
   let n = 0;
-  while (n < sweep.length && (n === 0 || performance.now() - t0 < 16)) {
+  // While a hand is in view, spend less time looking for new cards so the
+  // gestures stay quick (cards already found are still tracked above).
+  const budget = typeof handSeenAt === 'number' && now - handSeenAt < 1000 ? 5 : 16;
+  while (n < sweep.length && (n === 0 || performance.now() - t0 < budget)) {
     const hit = readWindow(frame, sweep[sweepAt]);
     sweepAt = (sweepAt + 1) % sweep.length;
     n++;

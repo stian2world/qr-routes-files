@@ -12,7 +12,9 @@
   <header class="bar">
     <div class="brand">NYC Planner <span>· your saved places, by area</span></div>
     <div class="bar-right">
-      <select id="cam-select" aria-label="Camera" hidden></select>
+      <button id="hand-btn" type="button" title="Hand gestures: ✋ open hand = zoom in, ✌️ peace = zoom out, ✊ fist = drag the map, ☝️ one finger = point">✋ Hands</button>
+      <button id="export-btn" type="button" title="Download today's plan as a calendar file (.ics) — opens in Calendar / Google Calendar">⬆️ Export plan</button>
+      <button id="clear-btn" type="button" class="ghost" title="Remove imported places from this browser">Clear</button>
     </div>
   </header>
 
@@ -28,6 +30,8 @@
         <span id="cam-status">Camera off</span>
         <label class="mirror"><input id="cam-mirror" type="checkbox"> Mirror</label>
       </div>
+      <select id="cam-select" class="cam-select" aria-label="Camera" hidden></select>
+      <div id="hand-state" class="hand-state"></div>
       <p class="hint">Keep cards in the <b>dock</b> (left of the dashed line). Slide one onto the <b>table</b> to fly there — it stays there until you press <b>✕ Clear area</b>.</p>
       <ul id="card-list" class="card-list"></ul>
     </aside>
@@ -37,17 +41,8 @@
       <div class="map-wrap">
         <div id="map"></div>
         <canvas id="lasso"></canvas>
-        <!-- Buttons low on the screen, where a pointing finger (☝️) can reach them -->
-        <div id="hand-bar" class="hand-bar">
-          <button id="hand-btn" type="button" title="Hand gestures: ✋ open hand = zoom in, ✌️ peace = zoom out, ✊ fist = drag the map, ☝️ one finger = point">✋ Hands</button>
-          <button id="lasso-btn" type="button" title="Circle places to add them (Esc to cancel)">◯ Circle places</button>
-          <button id="plan-arrange" type="button">✨ Arrange my day</button>
-          <button id="plan-clear" type="button">Clear plan</button>
-          <button id="area-clear" type="button" hidden>✕ Clear area</button>
-          <button id="clear-btn" type="button" title="Remove imported places from this browser (tap twice)">Clear places</button>
-          <button id="export-btn" type="button" title="Download today's plan as a calendar file (.ics) — opens in Calendar / Google Calendar">⬆️ Export plan</button>
-          <span id="hand-state" class="hand-state"></span>
-        </div>
+        <button id="area-clear" type="button" hidden>✕ Clear area</button>
+        <button id="lasso-btn" type="button" title="Circle places to add them (Esc to cancel)">◯ Circle places</button>
       </div>
       <div class="panel list">
         <div class="list-head"><span id="list-title" class="list-title">All saved places</span><span id="list-count" class="muted"></span></div>
@@ -58,7 +53,10 @@
 
     <!-- Right: today's plan -->
     <aside class="panel right">
-      <div class="kicker">TODAY'S PLAN</div>
+      <div class="kicker">TODAY'S PLAN <button id="plan-clear" type="button" class="ghost small">Clear</button></div>
+      <div class="plan-controls">
+        <button id="plan-arrange" type="button">✨ Arrange my day</button>
+      </div>
       <div id="plan-order" class="muted order"></div>
       <ol id="plan-list" class="plan-list"></ol>
       <div id="plan-total" class="muted total"></div>

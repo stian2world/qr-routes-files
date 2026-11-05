@@ -388,23 +388,14 @@ body.cam-mirror #bg-cam { transform: scaleX(-1); }
 .ph-actions { display: flex; justify-content: center; margin-top: 12px; }
 .ph-actions button { min-height: 40px; padding: 0 22px; border-radius: 999px; border: 0; background: #fff; color: #111; font-weight: 700; cursor: pointer; }
 
-/* --- Button row low on the map (reachable with a pointing finger) -------- */
-.hand-bar {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 4;
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px;
-  width: max-content; max-width: calc(100% - 24px);
-}
-.hand-bar button,
-.hand-bar #lasso-btn,
-.hand-bar #area-clear,
-.hand-bar #plan-arrange {
-  position: static; flex: none; min-height: 48px; padding: 0 18px; border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.6); background: rgba(0, 0, 0, 0.55); color: #fff;
-  font-weight: 600; white-space: nowrap; cursor: pointer;
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-}
-.hand-bar #plan-arrange { background: #fff; color: #111; border-color: #fff; font-weight: 700; }
-.hand-bar #lasso-btn.on { background: #fff; color: #111; }
-.hand-bar .hand-state { min-width: 0; text-align: left; text-shadow: 0 1px 3px #000; }
-.hand-bar .hand-state:empty { display: none; }
-.hand-bar #clear-btn.confirm { background: #c62828; border-color: #ff8a80; }
+/* Speed: blurring the panels over the moving camera picture redraws the blur
+   every video frame, which slowed everything down. Plain see-through panels
+   look almost the same and cost nothing. */
+.bar, .panel, .middle .list, #lasso-btn, #area-clear { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.bar { background: rgba(10, 10, 10, 0.6); }
+.panel { background: rgba(18, 18, 18, 0.66); }
+.middle .list { background: rgba(18, 18, 18, 0.72); }
+
+/* Camera picker + hand status live under the camera picture (left panel) */
+.cam-select { width: 100%; min-height: 34px; margin: 2px 0 6px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.06); font-size: 13px; }
+.left .hand-state { text-align: left; min-width: 0; font-size: 12px; color: #fff; margin-bottom: 6px; min-height: 16px; }

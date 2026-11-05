@@ -212,26 +212,8 @@ function showMapToast(text, ms = 0) {
 }
 
 
-// Two taps to clear (a pointing finger can't answer a confirm box): the
-// first tap arms the button for 5 s, a second tap deletes. With hand
-// gestures, move the finger off the button and back on for the second tap.
-const clearBtn = document.getElementById('clear-btn');
-let clearArmedTimer = null;
-function disarmClear() {
-  clearTimeout(clearArmedTimer);
-  clearArmedTimer = null;
-  clearBtn.classList.remove('confirm');
-  clearBtn.textContent = 'Clear places';
-}
-clearBtn.addEventListener('click', () => {
+document.getElementById('clear-btn').addEventListener('click', () => {
   if (!places.length) return;
-  if (!clearArmedTimer) {
-    clearBtn.classList.add('confirm');
-    clearBtn.textContent = 'Tap again to delete all places';
-    clearArmedTimer = setTimeout(disarmClear, 5000);
-    return;
-  }
-  disarmClear();
   places = [];
   plan = [];
   saveJson(PLACES_KEY, places);

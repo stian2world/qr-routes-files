@@ -13,7 +13,7 @@ const HANDS = {
   version: '0.10.21',
   model: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
   everyMs: 50, // run the hand model ~20×/s, leaves time for the QR reader
-  armMs: 1000, // hold ✋ / ✌️ / ✊ still this long before it starts working
+  armMs: 600, // hold ✋ / ✌️ / ✊ still this long before it starts working
   armWobblePx: 60, // moving more than this while holding restarts the wait
   zoomDelayMs: 0, // extra wait after arming
   zoomPerSec: 0.8, // zoom levels per second while held
@@ -59,12 +59,97 @@ handBtn.addEventListener('click', () => {
   if (handOn) loadHands();
 });
 
+// The hand model runs in a Web Worker (a separate thread), so the map, the
+// QR reader and the page never wait for it — that was the main lag. If the
+// worker can't start, it falls back to running on the page like before.
+const HAND_WORKER_SRC = `
+var exports = {}; var module = { exports: exports };
+var lm = null;
+onmessage = async function (e) {
+  var d = e.data;
+  if (d.type === 'init') {
+    try {
+      importScripts(d.base + '/vision_bundle.cjs');
+      var mp = module.exports;
+      var files = await mp.FilesetResolver.forVisionTasks(d.base + '/wasm');
+      var opts = function (delegate) { return { baseOptions: { modelAssetPath: d.model, delegate: delegate }, runningMode: 'VIDEO', numHands: 1,
+        minHandDetectionConfidence: 0.3, minHandPresenceConfidence: 0.3, minTrackingConfidence: 0.3 }; };
+      try { lm = await mp.HandLandmarker.createFromOptions(files, opts('CPU')); }
+      catch (err) { lm = await mp.HandLandmarker.createFromOptions(files, opts('GPU')); }
+      postMessage({ type: 'ready' });
+    } catch (err) { postMessage({ type: 'fail', message: String(err && err.message || err) }); }
+    return;
+  }
+  if (d.type === 'frame') {
+    var t0 = performance.now();
+    var hand = null;
+    try { var r = lm.detectForVideo(d.bitmap, d.ts); hand = r.landmarks && r.landmarks[0] || null; }
+    catch (err) { postMessage({ type: 'error', message: String(err && err.message || err) }); }
+    d.bitmap.close();
+    postMessage({ type: 'result', hand: hand, ms: performance.now() - t0, sentAt: d.sentAt });
+  }
+};`;
+
+let handWorker = null;
+let workerReady = false;
+let workerBusy = false;
+let handMs = 0; // model time per frame (ms), shown as fps
+let handFps = 0;
+let lastResultAt = 0;
+
 async function loadHands() {
-  if (handModel || handLoading) return;
+  if (handModel || handLoading || workerReady) return;
   handLoading = true;
   handState.textContent = 'loading…';
+  const base = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${HANDS.version}`;
+  const ok = await startHandWorker(base);
+  if (!ok) await loadHandsOnPage(base);
+  handLoading = false;
+}
+
+function startHandWorker(base) {
+  return new Promise((resolve) => {
+    try {
+      handWorker = new Worker(URL.createObjectURL(new Blob([HAND_WORKER_SRC], { type: 'text/javascript' })));
+    } catch (e) { resolve(false); return; }
+    const timer = setTimeout(() => { stopWorker(); resolve(false); }, 45000);
+    handWorker.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === 'ready') { clearTimeout(timer); workerReady = true; handState.textContent = 'hands ready — show your hand'; resolve(true); }
+      else if (d.type === 'fail') { clearTimeout(timer); console.warn('Hand worker failed', d.message); stopWorker(); resolve(false); }
+      else if (d.type === 'result') onHandResult(d);
+      else if (d.type === 'error') { workerBusy = false; if (++handErrors > 10) { stopWorker(); handLoading = false; loadHands(); } }
+    };
+    handWorker.onerror = () => { clearTimeout(timer); stopWorker(); resolve(false); };
+    handWorker.postMessage({ type: 'init', base, model: HANDS.model });
+  });
+}
+
+function stopWorker() {
+  try { handWorker?.terminate(); } catch (e) { /* gone */ }
+  handWorker = null;
+  workerReady = false;
+  workerBusy = false;
+}
+
+// How many hand readings per second (shown next to the gesture).
+function fpsText() {
+  return handFps ? ` · ${Math.round(handFps)} fps` : '';
+}
+
+function onHandResult(d) {
+  workerBusy = false;
+  handErrors = 0;
+  const now = performance.now();
+  handMs = handMs ? handMs * 0.8 + d.ms * 0.2 : d.ms;
+  if (lastResultAt) handFps = handFps ? handFps * 0.8 + (1000 / (now - lastResultAt)) * 0.2 : 1000 / (now - lastResultAt);
+  lastResultAt = now;
+  handFrame(d.hand ? d.hand.map((p) => ({ x: p.x * camVideo.videoWidth, y: p.y * camVideo.videoHeight })) : null, now);
+}
+
+// Fallback: the model on the page itself (slower: it pauses the page).
+async function loadHandsOnPage(base) {
   try {
-    const base = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${HANDS.version}`;
     const { FilesetResolver, HandLandmarker } = await import(`${base}/vision_bundle.mjs`);
     const files = await FilesetResolver.forVisionTasks(`${base}/wasm`);
     const options = (delegate) => ({
@@ -83,7 +168,6 @@ async function loadHands() {
     console.warn('Hand tracking unavailable', error);
     handState.textContent = '⚠️ hand model could not load';
   }
-  handLoading = false;
 }
 
 camVideo.addEventListener('playing', () => { if (handOn) loadHands(); });
@@ -92,8 +176,21 @@ requestAnimationFrame(handLoop);
 
 function handLoop(now) {
   requestAnimationFrame(handLoop);
-  if (!handOn || !handModel || camVideo.readyState < 2) return;
-  if (now - lastHandRun < HANDS.everyMs || camVideo.currentTime === lastHandVideoTime) return;
+  if (!handOn || camVideo.readyState < 2 || camVideo.currentTime === lastHandVideoTime) return;
+  if (workerReady) {
+    // One frame at a time: send the newest frame as soon as the last answer is back.
+    if (workerBusy) return;
+    workerBusy = true;
+    lastHandVideoTime = camVideo.currentTime;
+    const w = camVideo.videoWidth;
+    const h = camVideo.videoHeight;
+    const scale = Math.min(1, 640 / Math.max(w, h)); // the model works at ~224 px anyway
+    createImageBitmap(camVideo, { resizeWidth: Math.round(w * scale), resizeHeight: Math.round(h * scale) })
+      .then((bitmap) => handWorker.postMessage({ type: 'frame', bitmap, ts: now, sentAt: performance.now() }, [bitmap]))
+      .catch(() => { workerBusy = false; });
+    return;
+  }
+  if (!handModel || now - lastHandRun < HANDS.everyMs) return;
   lastHandRun = now;
   lastHandVideoTime = camVideo.currentTime;
   let result;
@@ -105,7 +202,7 @@ function handLoop(now) {
     return;
   }
   const lm = result.landmarks && result.landmarks[0];
-  handFrame(lm ? lm.map((p) => ({ x: p.x * camVideo.videoWidth, y: p.y * camVideo.videoHeight })) : null, now);
+  handFrame(lm ? lm.map((p) => ({ x: p.x * camVideo.videoWidth, y: p.y * camVideo.videoHeight })) : null, performance.now());
 }
 
 // --- reading the hand shape ----------------------------------------------------
@@ -150,7 +247,7 @@ function handFrame(lm, now) {
     disarm();
     hideDot();
     handLm = null;
-    handState.textContent = 'no hand seen';
+    handState.textContent = 'no hand seen' + fpsText();
     return;
   }
   handLm = lm;
@@ -183,9 +280,10 @@ function handFrame(lm, now) {
   showArmRing(at, now);
 
   const label = { open: '✋ zoom in', peace: '✌️ zoom out', fist: '✊ drag' };
-  handState.textContent = armPose ? (armed ? label[armPose] : `${POSE_ICON[armPose]} hold still…`) : pose === 'point' ? '☝️ point' : '· hand seen';
+  handState.textContent = (armPose ? (armed ? label[armPose] : `${POSE_ICON[armPose]} hold still…`) : pose === 'point' ? '☝️ point' : '· hand seen') + fpsText();
 
-  if (armed && armPose === 'fist' && pose === 'fist') dragWith(at);
+  // A moving fist often looks blurry for a frame or two ("other"): keep dragging.
+  if (armed && armPose === 'fist' && (pose === 'fist' || pose === 'other')) dragWith(at);
 
   if (pose === 'point') pointAt(toScreen(lm[8]), now);
   else hideDot();
@@ -196,6 +294,7 @@ function disarm() {
   armed = false;
   zoomPose = null;
   grabAt = null;
+  dragOwed = { x: 0, y: 0 };
   armRing.hidden = true;
 }
 
@@ -210,16 +309,32 @@ function showArmRing(at, now) {
 
 // --- dragging with a fist ------------------------------------------------------
 
-let grabAt = null; // smoothed screen point of the fist while grabbing
+// The fist position comes ~15–30 times a second; the map is moved every
+// screen frame (60×/s) towards where the fist is, so it glides instead of
+// jumping, and fast moves aren't smoothed away (only small shakes are).
+let grabAt = null; // filtered screen point of the fist while grabbing
+let dragOwed = { x: 0, y: 0 }; // pixels the map still has to move
+const DRAG_GAIN = 1.4; // map moves a bit more than the hand, so you don't run out of reach
 function dragWith(p) {
   if (!grabAt) { grabAt = p; return; } // first fist frame: just hold on
-  const next = { x: grabAt.x + (p.x - grabAt.x) * 0.6, y: grabAt.y + (p.y - grabAt.y) * 0.6 };
-  const dx = next.x - grabAt.x;
-  const dy = next.y - grabAt.y;
-  if (Math.hypot(dx, dy) < 1.5) return; // ignore tiny shakes
-  grabAt = next;
-  if (!map.isEasing()) map.panBy([-dx, -dy], { duration: 0 });
+  const dx = p.x - grabAt.x;
+  const dy = p.y - grabAt.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 2) return; // tiny shake
+  const follow = Math.min(1, 0.35 + dist / 40); // fast move → follow fully at once
+  grabAt = { x: grabAt.x + dx * follow, y: grabAt.y + dy * follow };
+  dragOwed.x += dx * follow * DRAG_GAIN;
+  dragOwed.y += dy * follow * DRAG_GAIN;
 }
+requestAnimationFrame(function dragLoop() {
+  requestAnimationFrame(dragLoop);
+  if (Math.abs(dragOwed.x) < 0.3 && Math.abs(dragOwed.y) < 0.3) return;
+  if (map.isEasing()) { dragOwed = { x: 0, y: 0 }; return; }
+  const step = { x: dragOwed.x * 0.45, y: dragOwed.y * 0.45 };
+  dragOwed.x -= step.x;
+  dragOwed.y -= step.y;
+  map.panBy([-step.x, -step.y], { duration: 0, animate: false });
+});
 
 // Zooming runs every screen frame (smooth), not only when the hand model
 // answers, and always around the middle of the map.

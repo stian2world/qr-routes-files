@@ -8,7 +8,7 @@
 // it's the same folder; when index.html was opened as a file it's the site.
 const PHONE_PAGE_URL = /^https?:/.test(location.protocol)
   ? new URL('phone.html', location.href).href
-  : 'https://stian2world.github.io/qrcode-tracking/phone.html';
+  : 'https://stian2world.github.io/qrcode-route-developed-version/phone.html';
 
 let phonePeer = null;
 let phoneStream = null;
