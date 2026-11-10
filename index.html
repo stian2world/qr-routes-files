@@ -4,17 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>NYC Planner</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
   <link rel="stylesheet" href="map/map.css">
 </head>
 <body>
   <video id="bg-cam" playsinline muted autoplay></video>
   <header class="bar">
-    <div class="brand">NYC Planner <span>· your saved places, by area</span></div>
+    <div class="brand">NYC Planner <span>· your saved places, by area · <b id="version">version Nov 10 · 7</b></span></div>
     <div class="bar-right">
-      <button id="hand-btn" type="button" title="Hand gestures: ✋ open hand = zoom in, ✌️ peace = zoom out, ✊ fist = drag the map, ☝️ one finger = point">✋ Hands</button>
+      <button id="hand-btn" type="button" title="Hand gestures: ✋ open hand: closer = zoom in, farther = zoom out; ✌️ peace = zoom out, ✊ fist = drag the map, ☝️ one finger = point">✋ Hands</button>
       <button id="export-btn" type="button" title="Download today's plan as a calendar file (.ics) — opens in Calendar / Google Calendar">⬆️ Export plan</button>
-      <button id="clear-btn" type="button" class="ghost" title="Remove imported places from this browser">Clear</button>
     </div>
   </header>
 
@@ -74,8 +73,10 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <!-- Map + QR libraries are kept next to the page, so a slow or blocked
+       CDN (school Wi-Fi, offline) can't stop the page from starting. -->
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="vendor/jsQR.js"></script>
   <script src="config.js"></script>
   <script src="map/routes.js"></script>
   <script src="subway.js"></script>
@@ -88,5 +89,7 @@
   <script src="map/map-import.js"></script>
   <script src="map/map-hands.js"></script>
   <script src="map/map-phone.js"></script>
+  <script src="map/map-voice.js"></script>
+  <script src="map/map-mode.js"></script>
 </body>
 </html>

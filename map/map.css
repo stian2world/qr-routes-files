@@ -399,3 +399,61 @@ body.cam-mirror #bg-cam { transform: scaleX(-1); }
 /* Camera picker + hand status live under the camera picture (left panel) */
 .cam-select { width: 100%; min-height: 34px; margin: 2px 0 6px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.06); font-size: 13px; }
 .left .hand-state { text-align: left; min-width: 0; font-size: 12px; color: #fff; margin-bottom: 6px; min-height: 16px; }
+
+/* --- Opening: choose Voice or Gesture (turn a card like a dial) ----------- */
+#mode-box { position: fixed; inset: 0; z-index: 55; display: grid; place-items: center; background: rgba(0,0,0,0.55); padding: 16px; }
+#mode-box[hidden] { display: none; }
+.mode-card { width: min(860px, 100%); background: rgba(16,16,16,0.92); border: 1px solid rgba(255,255,255,0.18); border-radius: 22px; padding: 26px; color: #fff; text-align: center; }
+.mode-card h2 { margin: 0 0 6px; font-size: 26px; }
+.mode-hint { margin: 0 0 20px; color: #bbb; font-size: 14px; }
+.mode-row { display: grid; grid-template-columns: 1fr 200px 1fr; gap: 18px; align-items: center; }
+.mode-opt { display: grid; gap: 6px; justify-items: center; padding: 22px 14px; border-radius: 18px; border: 2px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; cursor: pointer; transition: transform .15s, border-color .15s, background .15s; }
+.mode-opt .mi { font-size: 46px; }
+.mode-opt b { font-size: 20px; }
+.mode-opt small { color: #bbb; font-size: 12px; line-height: 1.4; }
+.mode-opt:hover, .mode-opt.aim { border-color: #fff; background: rgba(255,255,255,0.14); transform: scale(1.04); }
+.dial { position: relative; }
+.dial svg { width: 200px; height: 200px; display: block; }
+.dial-face { fill: rgba(255,255,255,0.04); stroke: rgba(255,255,255,0.25); stroke-width: 1.5; }
+.dial-left, .dial-right { fill: none; stroke-width: 6; stroke-linecap: round; }
+.dial-left { stroke: #8CCBF2; }
+.dial-right { stroke: #7CFC9A; }
+.dial-ring { fill: none; stroke: #fff; stroke-width: 4; stroke-dasharray: 0 100; transform: rotate(-90deg); }
+.dial-needle { transition: transform .08s linear; }
+.dial-needle line { stroke: #fff; stroke-width: 5; stroke-linecap: round; }
+.dial-needle circle { fill: #fff; }
+.dial-needle.off { opacity: 0.25; }
+.dial-label { margin-top: 6px; font-weight: 700; font-size: 14px; color: #ddd; }
+#mode-btn { white-space: nowrap; }
+@media (max-width: 700px) { .mode-row { grid-template-columns: 1fr; } }
+
+/* --- Voice mode: what was heard + the answer (big, for the projector) --- */
+#voice-bar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 45; display: flex; gap: 12px; align-items: center;
+  max-width: min(760px, calc(100% - 32px)); padding: 12px 18px; border-radius: 18px; background: rgba(0,0,0,0.82); border: 1px solid rgba(255,255,255,0.25); color: #fff; }
+#voice-bar[hidden] { display: none; }
+#voice-bar .vb-mic { font-size: 28px; animation: vb-pulse 1.6s ease-in-out infinite; }
+#voice-bar .vb-heard { font-size: 17px; font-weight: 700; }
+#voice-bar .vb-reply { font-size: 14px; color: #8CCBF2; margin-top: 2px; }
+@keyframes vb-pulse { 50% { opacity: 0.45; } }
+#gcal-btn { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 46; padding: 14px 22px; border-radius: 999px; background: #fff; color: #111; font-weight: 800; text-decoration: none; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+
+/* Export buttons (shown after a voice "export") */
+#export-box { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 46; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  padding: 12px; border-radius: 22px; background: rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.25); max-width: calc(100% - 32px); }
+#export-box a { padding: 14px 20px; border-radius: 999px; font-weight: 800; text-decoration: none; }
+#export-box .ex-main { background: #fff; color: #111; }
+#export-box .ex-second { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.35); }
+#export-box .ex-close { width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; color: #bbb; cursor: pointer; font-size: 16px; }
+
+.dial-both { fill: none; stroke: #FFD54F; stroke-width: 6; stroke-linecap: round; }
+.mode-opt.mode-both { margin: 18px auto 0; width: min(420px, 100%); grid-template-columns: auto 1fr; grid-template-rows: auto auto; justify-items: start; text-align: left; column-gap: 14px; padding: 14px 18px; }
+.mode-opt.mode-both .mi { grid-row: span 2; font-size: 34px; }
+
+/* Depth zoom gauge on the hand ring */
+#hand-arm .ar-icon { position: relative; z-index: 2; }
+#hand-arm .ar-base, #hand-arm .ar-now { display: none; position: absolute; left: 50%; top: 50%; border-radius: 50%; pointer-events: none; }
+#hand-arm.depth { background: none; width: 120px; height: 120px; margin: -60px 0 0 -60px; }
+#hand-arm.depth .ar-base { display: block; width: 80px; height: 80px; margin: -40px 0 0 -40px; border: 2px dashed rgba(255,255,255,0.7); }
+#hand-arm.depth .ar-now { display: block; width: 80px; height: 80px; margin: -40px 0 0 -40px; border: 4px solid rgba(255,255,255,0.9); transform: scale(var(--s, 1)); transition: transform .08s linear; background: rgba(0,0,0,0.35); }
+#hand-arm.depth.in .ar-now { border-color: #7CFC9A; }
+#hand-arm.depth.out .ar-now { border-color: #FFD54F; }

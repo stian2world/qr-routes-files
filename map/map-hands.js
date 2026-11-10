@@ -1,8 +1,12 @@
 // Hand gestures for the planner (index.html), from the same camera as the
 // QR cards. Uses MediaPipe Hand Landmarker (runs in the browser).
 //
-//   Open hand (✋)  — hold it: the map zooms IN.
-//   Peace sign (✌️) — hold it: the map zooms OUT.
+//   Open hand (✋)  — DEPTH ZOOM: hold it still until the ring fills (that
+//                    spot is the middle), then move your hand CLOSER to the
+//                    camera to zoom in, FARTHER away to zoom out. Back to the
+//                    middle = stop. (No depth camera needed: the hand looks
+//                    bigger when it's closer.)
+//   Peace sign (✌️) — hold it: the map zooms OUT (a shortcut).
 //   Fist (✊)       — grab the map: move your fist to drag it around.
 //   Point (☝️)      — only the index finger out: a dot follows your fingertip.
 //                    Hold it on a place (or a button) for a moment to open it.
@@ -240,10 +244,33 @@ armRing.hidden = true;
 document.body.appendChild(armRing);
 const POSE_ICON = { open: '✋', peace: '✌️', fist: '✊' };
 
+// --- depth zoom: how big the hand looks (closer = bigger) -----------------------
+const DEPTH = {
+  deadZone: 0.08, // ±8 % around the middle does nothing (hands shake)
+  fullAt: 0.35, // 35 % bigger/smaller = full speed
+  maxPerSec: 1.6, // zoom levels per second at full speed
+};
+let handSize = 0; // smoothed palm size (video px)
+let depthBase = 0; // palm size when the ring filled = "the middle"
+let depthSpeed = 0; // -1 … +1 right now
+
+// Palm size from points that don't move when fingers bend.
+function palmSize(lm) {
+  return (dist(lm[0], lm[5]) + dist(lm[0], lm[17]) + dist(lm[5], lm[17]) + dist(lm[0], lm[9])) / 4;
+}
+function depthFromSize() {
+  if (!depthBase || !handSize) return 0;
+  const x = Math.log(handSize / depthBase); // > 0 closer, < 0 farther
+  const a = Math.abs(x);
+  if (a < DEPTH.deadZone) return 0;
+  return Math.sign(x) * Math.min(1, (a - DEPTH.deadZone) / (DEPTH.fullAt - DEPTH.deadZone));
+}
+
 function handFrame(lm, now) {
   if (!lm) {
     poseCandidate = pose = 'none';
     poseCount = 0;
+    handSize = 0;
     disarm();
     hideDot();
     handLm = null;
@@ -252,6 +279,9 @@ function handFrame(lm, now) {
   }
   handLm = lm;
   handSeenAt = now;
+  const ps = palmSize(lm);
+  handSize = handSize ? handSize * 0.5 + ps * 0.5 : ps;
+  if (armed && armPose === 'open') depthSpeed = depthFromSize();
   const seen = classifyHand(lm);
   poseCount = seen === poseCandidate ? poseCount + 1 : 1;
   poseCandidate = seen;
@@ -274,12 +304,13 @@ function handFrame(lm, now) {
     if (now - armSince >= HANDS.armMs) {
       armed = true;
       if (armPose === 'fist') grabAt = at;
-      else { zoomPose = armPose; zoomSince = now; }
+      else { zoomPose = armPose; zoomSince = now; if (armPose === 'open') depthBase = handSize; }
     }
   }
   showArmRing(at, now);
 
-  const label = { open: '✋ zoom in', peace: '✌️ zoom out', fist: '✊ drag' };
+  const depthLabel = depthSpeed > 0 ? '✋ closer → zooming in' : depthSpeed < 0 ? '✋ farther → zooming out' : '✋ move closer / farther';
+  const label = { open: depthLabel, peace: '✌️ zoom out', fist: '✊ drag' };
   handState.textContent = (armPose ? (armed ? label[armPose] : `${POSE_ICON[armPose]} hold still…`) : pose === 'point' ? '☝️ point' : '· hand seen') + fpsText();
 
   // A moving fist often looks blurry for a frame or two ("other"): keep dragging.
@@ -293,6 +324,8 @@ function disarm() {
   armPose = null;
   armed = false;
   zoomPose = null;
+  depthBase = 0;
+  depthSpeed = 0;
   grabAt = null;
   dragOwed = { x: 0, y: 0 };
   armRing.hidden = true;
@@ -301,9 +334,18 @@ function disarm() {
 function showArmRing(at, now) {
   if (!armPose) { armRing.hidden = true; return; }
   armRing.hidden = false;
-  armRing.textContent = POSE_ICON[armPose];
+  if (armRing.dataset.icon !== armPose) {
+    armRing.dataset.icon = armPose;
+    armRing.innerHTML = `<i class="ar-base"></i><i class="ar-now"></i><span class="ar-icon">${POSE_ICON[armPose]}</span>`;
+  }
   armRing.classList.toggle('armed', armed);
   armRing.style.setProperty('--p', armed ? 1 : Math.min(1, (now - armSince) / HANDS.armMs).toFixed(3));
+  // Depth gauge: dashed circle = the middle, solid circle = your hand now.
+  const depth = armed && armPose === 'open' && depthBase;
+  armRing.classList.toggle('depth', !!depth);
+  armRing.classList.toggle('in', depth && depthSpeed > 0);
+  armRing.classList.toggle('out', depth && depthSpeed < 0);
+  if (depth) armRing.style.setProperty('--s', Math.max(0.5, Math.min(1.7, handSize / depthBase)).toFixed(3));
   armRing.style.transform = `translate(${at.x}px, ${at.y}px)`;
 }
 
@@ -349,7 +391,9 @@ requestAnimationFrame(function zoomLoop(now) {
   lastZoomFrame = now;
   if (!handOn || !zoomPose || now - handSeenAt > 400 || now - zoomSince < HANDS.zoomDelayMs) return;
   if (map.isEasing()) return; // let a card's fly-to finish first
-  const z = Math.max(HANDS.minZoom, Math.min(HANDS.maxZoom, map.getZoom() + (zoomPose === 'open' ? 1 : -1) * HANDS.zoomPerSec * dt));
+  const speed = zoomPose === 'open' ? depthSpeed * DEPTH.maxPerSec : -HANDS.zoomPerSec;
+  if (!speed) return;
+  const z = Math.max(HANDS.minZoom, Math.min(HANDS.maxZoom, map.getZoom() + speed * dt));
   if (z !== map.getZoom()) map.setZoom(z);
 });
 

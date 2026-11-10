@@ -480,8 +480,21 @@ function icsFold(line) {
   return out.join('\r\n ');
 }
 function exportPlan() {
+  const f = buildIcsFile();
+  if (!f) { showMapToast('Add some places to your plan first', 3000); return; }
+  const a = document.createElement('a');
+  a.href = f.href;
+  a.download = f.name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  showMapToast('Plan downloaded — open the .ics file to add it to your calendar', 4000);
+}
+
+// The calendar file for today's plan: { href (blob link), name } or null.
+function buildIcsFile() {
   const stops = plan.map((id) => places.find((p) => p.id === id)).filter(Boolean);
-  if (!stops.length) { showMapToast('Add some places to your plan first', 3000); return; }
+  if (!stops.length) return null;
   const day = planDay(stops);
   const events = [];
   const add = (start, end, summary, location, desc) => events.push([
@@ -509,13 +522,35 @@ function exportPlan() {
   // One all-in-one event too, so the whole day is readable in one place.
   add(day.rows[0].t, day.end, `NYC day · ${stops.length} stops`, '', lines.join('\n'));
   const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NYC Planner//EN', 'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR'].join('\r\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
   const d = day.rows[0].t;
-  a.download = `nyc-day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.ics`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  showMapToast('Plan downloaded — open the .ics file to add it to your calendar', 4000);
+  return {
+    href: URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })),
+    name: `nyc-day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.ics`,
+  };
 }
 document.getElementById('export-btn').addEventListener('click', exportPlan);
+
+// Google Calendar: a link that opens Google Calendar with the whole day
+// already filled in as one event (you just press Save).
+function planTextLines(day) {
+  let n = 0;
+  return day.rows.map((r) => {
+    if (r.kind === 'stop') { n++; return `${clock(r.t)}  ${n}. ${r.place.name} (until ${clock(r.until)})`; }
+    if (r.kind === 'leg') return `${clock(r.t)}  ${r.icon} ${r.text}${r.minutes ? ` · ${r.minutes} min` : ''}${r.sub ? ` · ${r.sub}` : ''}`;
+    return `${clock(r.t)}  ★ ${r.text}`;
+  });
+}
+function googleCalendarLink() {
+  const stops = plan.map((id) => places.find((p) => p.id === id)).filter(Boolean);
+  if (!stops.length) return null;
+  const day = planDay(stops);
+  const utc = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const q = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `NYC day · ${stops.map((p) => p.name).join(' → ')}`.slice(0, 200),
+    dates: `${utc(day.rows[0].t)}/${utc(day.end)}`,
+    details: planTextLines(day).join('\n'),
+    location: stops[0].address || stops[0].name,
+  });
+  return `https://calendar.google.com/calendar/render?${q}`;
+}

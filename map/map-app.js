@@ -145,6 +145,7 @@ function addHome() {
 
 // Area names only once zoomed in a bit (they overlap at city scale).
 map.on('zoom', () => document.body.classList.toggle('far', map.getZoom() < 12.3));
+map.on('zoomend', () => styleMarkers());
 
 function addAreaLabels() {
   for (const a of AREAS) {
@@ -214,8 +215,11 @@ function styleMarkers() {
     if (!m) continue;
     const inArea = !activeArea || areaOf(p) === activeArea;
     const inCat = activeCategory === 'all' || p.category === activeCategory;
-    m.el.classList.toggle('away', !inArea);
-    m.el.classList.toggle('dim', inArea && !inCat);
+    // Other areas' places: hidden while you're looking at the area, but
+    // shown faintly once you zoom out past it — so nothing seems to vanish.
+    const far = map.getZoom() < 12.5;
+    m.el.classList.toggle('away', !inArea && !far);
+    m.el.classList.toggle('dim', (inArea && !inCat) || (!inArea && far));
     m.el.classList.toggle('in-plan', plan.includes(p.id));
     m.el.classList.toggle('selected', selectedId === p.id);
   }
@@ -458,7 +462,8 @@ function loop(now) {
   if (key !== lastCardsKey) {
     lastCardsKey = key;
     renderCards(cards);
-    if (want && want !== cardArea) {
+    // (Not while the opening screen is up — there a card is a dial.)
+    if (want && want !== cardArea && !(typeof modeChooserOpen === 'function' && modeChooserOpen())) {
       cardArea = want;
       setArea(want, 'card');
     }

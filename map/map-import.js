@@ -212,16 +212,8 @@ function showMapToast(text, ms = 0) {
 }
 
 
-document.getElementById('clear-btn').addEventListener('click', () => {
-  if (!places.length) return;
-  places = [];
-  plan = [];
-  saveJson(PLACES_KEY, places);
-  saveJson(PLAN_KEY, plan);
-  renderMarkers();
-  renderAll();
-  showMapToast('Saved places cleared', 3000);
-});
+// (The header "Clear" button that deleted saved places was removed: it was too
+// easy to mix up with clearing the plan. The plan has its own Clear.)
 
 // Load the places that come with the page (plain <script> files, so this
 // also works when index.html is opened straight from the computer):
